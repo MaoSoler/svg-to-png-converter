@@ -1,84 +1,112 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import cairosvg
 import base64
-from typing import Optional
+from playwright.sync_api import sync_playwright
+import tempfile
+import os
+import logging
 
-# Crear app FastAPI
-app = FastAPI(
-    title="SVG to PNG Converter",
-    description="Convierte SVG (Base64) a PNG (Base64) usando CairoSVG",
-    version="1.0.0"
-)
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Schema del request
-class SVGInput(BaseModel):
-    svg_base64: str
-    output_width: Optional[int] = None
-    output_height: Optional[int] = None
+app = FastAPI(title="SVG to PNG Converter")
 
-# Schema del response
-class PNGOutput(BaseModel):
-    png_base64: str
-    message: str
+class SVGRequest(BaseModel):
+    svg_content: str
 
 @app.get("/")
 async def root():
-    return {
-        "service": "SVG to PNG Converter",
-        "status": "running",
-        "endpoint": "/convert",
-        "method": "POST"
-    }
+    return {"status": "SVG to PNG Converter is running", "engine": "Playwright"}
+
+@app.post("/convert")
+async def convert_svg_to_png(request: SVGRequest):
+    svg_path = None
+    png_path = None
+    
+    try:
+        logger.info("Iniciando conversión SVG→PNG con Playwright")
+        
+        # Crear archivo temporal para el HTML
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as html_file:
+            # Wrap SVG en HTML completo
+            html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{
+            margin: 0;
+            padding: 20px;
+            background: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }}
+        svg {{
+            display: block;
+            max-width: 100%;
+            height: auto;
+        }}
+    </style>
+</head>
+<body>
+{request.svg_content}
+</body>
+</html>"""
+            html_file.write(html_content)
+            svg_path = html_file.name
+        
+        logger.info(f"HTML temporal creado: {svg_path}")
+        
+        # Crear archivo temporal para el PNG
+        png_path = tempfile.mktemp(suffix='.png')
+        
+        # Convertir usando Playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': 1200, 'height': 1200})
+            
+            # Cargar el HTML
+            page.goto(f'file://{svg_path}')
+            
+            # Esperar a que el SVG se renderice completamente
+            page.wait_for_load_state('networkidle')
+            
+            # Tomar screenshot con fondo blanco
+            page.screenshot(
+                path=png_path,
+                full_page=True,
+                omit_background=False
+            )
+            
+            browser.close()
+        
+        logger.info(f"PNG generado: {png_path}")
+        
+        # Leer PNG y convertir a base64
+        with open(png_path, 'rb') as png_file:
+            png_bytes = png_file.read()
+            png_base64 = base64.b64encode(png_bytes).decode('utf-8')
+        
+        logger.info(f"Conversión exitosa, tamaño: {len(png_bytes)} bytes")
+        
+        return {
+            "png_base64": png_base64,
+            "size_bytes": len(png_bytes)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en conversión: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    
+    finally:
+        # Limpiar archivos temporales
+        if svg_path and os.path.exists(svg_path):
+            os.unlink(svg_path)
+        if png_path and os.path.exists(png_path):
+            os.unlink(png_path)
 
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
-
-@app.post("/convert", response_model=PNGOutput)
-async def convert_svg_to_png(data: SVGInput):
-    try:
-        # 1. Decodificar SVG desde Base64
-        svg_bytes = base64.b64decode(data.svg_base64)
-        
-        # 2. Validar que sea SVG
-        svg_text = svg_bytes.decode('utf-8')
-        if '<svg' not in svg_text.lower():
-            raise HTTPException(
-                status_code=400,
-                detail="El contenido no parece ser un SVG válido"
-            )
-        
-        # 3. Convertir SVG a PNG (TODO EN MEMORIA)
-        png_kwargs = {'bytestring': svg_bytes}
-        
-        # Agregar dimensiones si se especificaron
-        if data.output_width:
-            png_kwargs['output_width'] = data.output_width
-        if data.output_height:
-            png_kwargs['output_height'] = data.output_height
-        
-        png_bytes = cairosvg.svg2png(**png_kwargs)
-        
-        # 4. Codificar PNG a Base64
-        png_base64 = base64.b64encode(png_bytes).decode('utf-8')
-        
-        return {
-            "png_base64": png_base64,
-            "message": "Conversión exitosa"
-        }
-        
-    except base64.binascii.Error:
-        raise HTTPException(
-            status_code=400,
-            detail="Error al decodificar Base64. Asegúrate de enviar SVG en Base64 válido"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al convertir SVG: {str(e)}"
-        )
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
