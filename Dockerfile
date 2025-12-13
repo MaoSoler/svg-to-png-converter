@@ -27,25 +27,3 @@ EXPOSE 8000
 
 # Comando para ejecutar
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-Click **"Commit changes..."** → **"Commit changes"**
-
----
-
-**ARCHIVO 4: `.dockerignore`** (opcional pero recomendado)
-
-Nombre del archivo: `.dockerignore`
-```
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.git
-.gitignore
-README.md
-.vscode
-.idea
