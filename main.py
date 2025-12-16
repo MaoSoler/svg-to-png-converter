@@ -61,7 +61,7 @@ async def convert_svg_to_png(request: SVGRequest):
         # Convert to PNG using Playwright async API
         async with async_playwright() as p:
             browser = await p.chromium.launch()
-            page = await browser.new_page(viewport={{'width': 1200, 'height': 1200}})
+            page = await browser.new_page(viewport={'width': 1200, 'height': 1200})
             await page.goto(f'file://{html_path}')
             
             # Wait for SVG to be fully loaded and rendered
@@ -78,7 +78,7 @@ async def convert_svg_to_png(request: SVGRequest):
         # Convert to base64
         png_base64 = base64.b64encode(png_bytes).decode('utf-8')
         
-        return {{"png_base64": png_base64}}
+        return {"png_base64": png_base64}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
