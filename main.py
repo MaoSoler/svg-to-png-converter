@@ -34,19 +34,23 @@ async def convert_svg_to_png(request: SVGRequest):
                         padding: 0;
                         box-sizing: border-box;
                     }}
-                    body {{
+                    html, body {{
                         width: 1200px;
                         height: 1200px;
+                        overflow: hidden;
+                    }}
+                    body {{
                         display: flex;
                         justify-content: center;
                         align-items: center;
                         background: white;
                     }}
                     svg {{
-                        width: 1200px !important;
-                        height: 1200px !important;
+                        width: 100% !important;
+                        height: 100% !important;
                         max-width: 1200px;
                         max-height: 1200px;
+                        object-fit: contain;
                     }}
                 </style>
             </head>
