@@ -29,7 +29,25 @@ async def convert_svg_to_png(request: SVGRequest):
             <head>
                 <meta charset="UTF-8">
                 <style>
-                    body {{ margin: 0; padding: 0; }}
+                    * {{
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }}
+                    body {{
+                        width: 1200px;
+                        height: 1200px;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        background: white;
+                    }}
+                    svg {{
+                        width: 1200px !important;
+                        height: 1200px !important;
+                        max-width: 1200px;
+                        max-height: 1200px;
+                    }}
                 </style>
             </head>
             <body>
@@ -43,9 +61,15 @@ async def convert_svg_to_png(request: SVGRequest):
         # Convert to PNG using Playwright async API
         async with async_playwright() as p:
             browser = await p.chromium.launch()
-            page = await browser.new_page(viewport={'width': 1200, 'height': 1200})
+            page = await browser.new_page(viewport={{'width': 1200, 'height': 1200}})
             await page.goto(f'file://{html_path}')
-            png_bytes = await page.screenshot(full_page=True)
+            
+            # Wait for SVG to be fully loaded and rendered
+            await page.wait_for_load_state('networkidle')
+            await page.wait_for_timeout(2000)  # Wait 2 seconds for rendering
+            
+            # Take screenshot with exact dimensions
+            png_bytes = await page.screenshot(full_page=False)
             await browser.close()
         
         # Clean up
@@ -54,7 +78,7 @@ async def convert_svg_to_png(request: SVGRequest):
         # Convert to base64
         png_base64 = base64.b64encode(png_bytes).decode('utf-8')
         
-        return {"png_base64": png_base64}
+        return {{"png_base64": png_base64}}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
