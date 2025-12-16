@@ -14,6 +14,10 @@ class SVGRequest(BaseModel):
 def read_root():
     return {"status": "SVG to PNG Converter is running", "engine": "Playwright"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
 @app.post("/convert")
 async def convert_svg_to_png(request: SVGRequest):
     try:
